@@ -31,6 +31,7 @@ AbstractContentContext.cpp
 AbstractWrittenFont.cpp
 ANSIFontWriter.cpp
 Ascii7Encoding.cpp
+ArrayOfInputStreamsStream.cpp
 CatalogInformation.cpp
 CFFANSIFontWriter.cpp
 CFFDescendentFontWriter.cpp
@@ -71,12 +72,7 @@ InputFlateDecodeStream.cpp
 InputLimitedStream.cpp
 InputRC4XcodeStream.cpp
 InputPFBDecodeStream.cpp
-InputPredictorPNGAverageStream.cpp
-InputPredictorPNGNoneStream.cpp
 InputPredictorPNGOptimumStream.cpp
-InputPredictorPNGPaethStream.cpp
-InputPredictorPNGSubStream.cpp
-InputPredictorPNGUpStream.cpp
 InputPredictorTIFFSubStream.cpp
 InputStreamSkipperStream.cpp
 InputStringBufferStream.cpp
@@ -175,6 +171,7 @@ AbstractWrittenFont.h
 AdapterIByteReaderWithPositionToIReadPositionProvider.h
 ANSIFontWriter.h
 Ascii7Encoding.h
+ArrayOfInputStreamsStream.h
 BetweenIncluding.h
 BoxingBase.h
 CatalogInformation.h
@@ -240,12 +237,7 @@ InputFlateDecodeStream.h
 InputLimitedStream.h
 InputRC4XcodeStream.h
 InputPFBDecodeStream.h
-InputPredictorPNGAverageStream.h
-InputPredictorPNGNoneStream.h
 InputPredictorPNGOptimumStream.h
-InputPredictorPNGPaethStream.h
-InputPredictorPNGSubStream.h
-InputPredictorPNGUpStream.h
 InputPredictorTIFFSubStream.h
 InputStreamSkipperStream.h
 InputStringBufferStream.h
@@ -628,23 +620,15 @@ PDFArrayIterator.h
 )
 
 source_group("PDF Embedding\\PredictionFilters" FILES
-InputPredictorPNGAverageStream.cpp
-InputPredictorPNGAverageStream.h
-InputPredictorPNGNoneStream.cpp
-InputPredictorPNGNoneStream.h
 InputPredictorPNGOptimumStream.cpp
 InputPredictorPNGOptimumStream.h
-InputPredictorPNGPaethStream.cpp
-InputPredictorPNGPaethStream.h
-InputPredictorPNGSubStream.cpp
-InputPredictorPNGSubStream.h
-InputPredictorPNGUpStream.cpp
-InputPredictorPNGUpStream.h
 InputPredictorTIFFSubStream.cpp
 InputPredictorTIFFSubStream.h
 )
 
 source_group("PDF Embedding" FILES
+ArrayOfInputStreamsStream.cpp
+ArrayOfInputStreamsStream.h
 IPDFParserExtender.h
 PDFDocumentCopyingContext.cpp
 PDFDocumentCopyingContext.h

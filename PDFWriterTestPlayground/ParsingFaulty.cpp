@@ -20,6 +20,7 @@ limitations under the License.
 */
 #include "ParsingFaulty.h"
 #include "PDFParser.h"
+#include "PDFPageInput.h"
 #include "InputFile.h"
 #include "EStatusCode.h"
 
@@ -39,6 +40,7 @@ ParsingFaulty::~ParsingFaulty() {
 
 }
 
+static EStatusCode openPDF(const string& path);
 
 EStatusCode openPDF(const string& path) {
 	PDFParser parser;
@@ -56,6 +58,52 @@ EStatusCode openPDF(const string& path) {
 	return status;
 }
 
+EStatusCode openPDFForNullPageTest(const string& path) {
+	PDFParser parser;
+	InputFile pdfFile;
+	EStatusCode status = pdfFile.OpenFile(path);
+	if (status != eSuccess) {
+		std::cout << "Invalid path: " << path.c_str() << std::endl;
+		return status;
+	}
+
+	status = parser.StartPDFParsing(pdfFile.GetInputStream());
+	if (status != eSuccess) {
+		std::cout << "Failed at start parsing" << std::endl;
+	}
+
+	RefCountPtr<PDFDictionary> page = parser.ParsePage(33);
+	if(page != NULL) {
+		status = eFailure;
+		std::cout << "Page should be null at 33"<< std::endl;
+	}
+	return status;
+}
+
+EStatusCode openPDFForRotationTest(const string& path) {
+	PDFParser parser;
+	InputFile pdfFile;
+	EStatusCode status = pdfFile.OpenFile(path);
+	if (status != eSuccess) {
+		std::cout << "Invalid path: " << path.c_str() << std::endl;
+		return status;
+	}
+
+	status = parser.StartPDFParsing(pdfFile.GetInputStream());
+	if (status != eSuccess) {
+		std::cout << "Failed at start parsing" << std::endl;
+	}
+
+
+	PDFPageInput pageInput(&parser, parser.ParsePage(0));
+	if (pageInput.GetRotate() != -90) {
+		status = eFailure;
+		std::cout << "Page rotation should be -90, but is " << pageInput.GetRotate()<< std::endl;
+	}
+
+	return status;
+}
+
 EStatusCode ParsingFaulty::Run(const TestConfiguration& inTestConfiguration) {
 	EStatusCode status = openPDF(RelativeURLToLocalPath(inTestConfiguration.mSampleFileBase, "TestMaterials/test3.pdf"));
 	if (status != eSuccess) {
@@ -66,6 +114,43 @@ EStatusCode ParsingFaulty::Run(const TestConfiguration& inTestConfiguration) {
 	status = openPDF(RelativeURLToLocalPath(inTestConfiguration.mSampleFileBase, "TestMaterials/test4.pdf"));
 	if (status != eSuccess) {
 		std::cout << "Failed at start parsing test4.pdf" << std::endl;
+		return status;
+	}
+
+	status = openPDF(RelativeURLToLocalPath(inTestConfiguration.mSampleFileBase, "TestMaterials/kids-as-reference.pdf"));
+	if (status != eSuccess) {
+		std::cout << "Failed at start parsing kids-as-reference.pdf" << std::endl;
+		return status;
+	}
+
+
+	status = openPDFForNullPageTest(RelativeURLToLocalPath(inTestConfiguration.mSampleFileBase, "TestMaterials/unexpected.kids.array.pdf"));
+	if (status != eSuccess) {
+		std::cout << "Failed at start parsing unexpected.kids.array.pdf" << std::endl;
+		return status;
+	}
+
+	status = openPDFForRotationTest(RelativeURLToLocalPath(inTestConfiguration.mSampleFileBase, "TestMaterials/wrong.rotation.pdf"));
+	if (status != eSuccess) {
+		std::cout << "Failed at start parsing wrong.rotation.pdf" << std::endl;
+		return status;
+	}
+	
+	status = openPDF(RelativeURLToLocalPath(inTestConfiguration.mSampleFileBase, "TestMaterials/1.unfamiliar.entry.type.pdf"));
+	if (status != eSuccess) {
+		std::cout << "Failed at start parsing 1.unfamiliar.entry.type.pdf" << std::endl;
+		return status;
+	}
+
+	status = openPDF(RelativeURLToLocalPath(inTestConfiguration.mSampleFileBase, "TestMaterials/2.unfamiliar.entry.type.pdf"));
+	if (status != eSuccess) {
+		std::cout << "Failed at start parsing 2.unfamiliar.entry.type.pdf" << std::endl;
+		return status;
+	}
+
+	status = openPDF(RelativeURLToLocalPath(inTestConfiguration.mSampleFileBase, "TestMaterials/test5.pdf"));
+	if (status != eSuccess) {
+		std::cout << "Failed at start parsing test5.pdf" << std::endl;
 		return status;
 	}
 

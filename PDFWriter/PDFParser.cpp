@@ -37,16 +37,12 @@
 #include "InputLimitedStream.h"
 #include "InputFlateDecodeStream.h"
 #include "InputStreamSkipperStream.h"
-#include "InputPredictorPNGUpStream.h"
-#include "InputPredictorPNGNoneStream.h"
-#include "InputPredictorPNGSubStream.h"
-#include "InputPredictorPNGAverageStream.h"
-#include "InputPredictorPNGPaethStream.h"
 #include "InputPredictorPNGOptimumStream.h"
 #include "InputPredictorTIFFSubStream.h"
 #include "InputAscii85DecodeStream.h"
 #include "IPDFParserExtender.h"
 #include "InputDCTDecodeStream.h"
+#include "ArrayOfInputStreamsStream.h"
 
 #include  <algorithm>
 using namespace PDFHummus;
@@ -170,7 +166,7 @@ EStatusCode PDFParser::ParseHeaderLine()
 
 	if(tokenizerResult.second.compare(0,scPDFMagic.size(),scPDFMagic) != 0)
 	{
-		TRACE_LOG1("PDFParser::ParseHeaderLine, file does not begin as a PDF file. a PDF file should start with \"%%PDF-\". file header = %s",tokenizerResult.second.c_str());
+		TRACE_LOG1("PDFParser::ParseHeaderLine, file does not begin as a PDF file. a PDF file should start with \"%%PDF-\". file header = %s",tokenizerResult.second.substr(0, MAX_TRACE_SIZE - 200).c_str());
 		return PDFHummus::eFailure;
 	}
 
@@ -306,14 +302,19 @@ bool PDFParser::ReadNextBufferFromEnd()
 	}
 	else
 	{
-		mStream->SetPositionFromEnd(mLastReadPositionFromEnd + LINE_BUFFER_SIZE);
-		LongBufferSizeType readAmount = mStream->Read(mLinesBuffer,LINE_BUFFER_SIZE);
+		mStream->SetPositionFromEnd(mLastReadPositionFromEnd); // last known position that worked.
+		LongFilePositionType positionBefore = mStream->GetCurrentPosition();
+		mStream->SetPositionFromEnd(mLastReadPositionFromEnd + LINE_BUFFER_SIZE); // try earlier one
+		LongFilePositionType positionAfter = mStream->GetCurrentPosition();
+		LongBufferSizeType readAmount = positionBefore - positionAfter; // check if got to start by testing position
+		if(readAmount != 0)
+			readAmount = mStream->Read(mLinesBuffer,readAmount);
+		mEncounteredFileStart = readAmount < LINE_BUFFER_SIZE;
 		if(0 == readAmount)
 			return false;
 		mLastAvailableIndex = mLinesBuffer + readAmount;
 		mCurrentBufferIndex = mLastAvailableIndex;
 		mLastReadPositionFromEnd+= readAmount;
-		mEncounteredFileStart = readAmount < LINE_BUFFER_SIZE;
 		return true;
 	}
 }
@@ -565,7 +566,7 @@ EStatusCode PDFParser::ParseXrefFromXrefTable(XrefEntryInput* inXrefTable,
 		token = tokenizer.GetNextToken();
 		if(!token.first || token.second != scXref)
 		{
-			TRACE_LOG1("PDFParser::ParseXref, error in parsing xref, expected to find \"xref\" keyword, found = %s",token.second.c_str());
+			TRACE_LOG1("PDFParser::ParseXref, error in parsing xref, expected to find \"xref\" keyword, found = %s",token.second.substr(0, MAX_TRACE_SIZE - 200).c_str());
 			status = PDFHummus::eFailure;
 			break;
 		}
@@ -654,7 +655,11 @@ EStatusCode PDFParser::ReadNextXrefEntry(Byte inBuffer[20]) {
 		TRACE_LOG("PDFParser::ReadNextXrefEntry, failed to read xref entry");
 		status = PDFHummus::eFailure;
 	}
-
+	// set position if the EOL is 1 char instead of 2 (some documents may not follow the standard!)
+	if ((inBuffer[19] != scLN && inBuffer[19] != scCR) && (inBuffer[18] == scLN || inBuffer[18] == scCR))
+	{
+		mStream->SetPosition(mStream->GetCurrentPosition() - 1);
+	}
 	return status;
 }
 
@@ -756,7 +761,7 @@ PDFObject* PDFParser::ParseExistingInDirectObject(ObjectIDType inObjectID)
 		if(objKeyword->GetValue() != scObj)
 		{
 			TRACE_LOG1("PDFParser::ParseExistingInDirectObject, failed to read object declaration, expected obj keyword found %s",
-				objKeyword->GetValue().c_str());
+				objKeyword->GetValue().substr(0, MAX_TRACE_SIZE - 200).c_str());
 			break;
 		}
 
@@ -877,7 +882,10 @@ EStatusCode PDFParser::ParsePagesIDs(PDFDictionary* inPageNode,ObjectIDType inNo
 		else if(scPages == objectType->GetValue())
 		{
 			// a Page tree node
-            PDFObjectCastPtr<PDFArray> kidsObject(QueryDictionaryObject(inPageNode, "Kids"));
+			PDFObject* pKids= inPageNode->QueryDirectObject("Kids");
+			if (pKids && pKids->GetType() == PDFObject::ePDFObjectIndirectObjectReference)
+				pKids= ParseNewObject(((PDFIndirectObjectReference*)pKids)->mObjectID);
+			PDFObjectCastPtr<PDFArray> kidsObject(pKids);
 			if(!kidsObject)
 			{
 				TRACE_LOG("PDFParser::ParsePagesIDs, unable to find page kids array");
@@ -889,6 +897,13 @@ EStatusCode PDFParser::ParsePagesIDs(PDFDictionary* inPageNode,ObjectIDType inNo
 
 			while(it.MoveNext() && PDFHummus::eSuccess == status)
 			{
+				if (it.GetItem()->GetType() == PDFObject::ePDFObjectNull) {
+					// null pointer. mark as empty page
+					mPagesObjectIDs[ioCurrentPageIndex] = 0;
+					++ioCurrentPageIndex;
+					continue;
+				}
+
 				if(it.GetItem()->GetType() != PDFObject::ePDFObjectIndirectObjectReference)
 				{
 					TRACE_LOG1("PDFParser::ParsePagesIDs, unexpected type for a Kids array object, type = %s",PDFObject::scPDFObjectTypeLabel(it.GetItem()->GetType()));
@@ -909,7 +924,7 @@ EStatusCode PDFParser::ParsePagesIDs(PDFDictionary* inPageNode,ObjectIDType inNo
 		}
 		else
 		{
-			TRACE_LOG1("PDFParser::ParsePagesIDs, unexpected object type. should be either Page or Pages, found %s",objectType->GetValue().c_str());
+			TRACE_LOG1("PDFParser::ParsePagesIDs, unexpected object type. should be either Page or Pages, found %s",objectType->GetValue().substr(0, MAX_TRACE_SIZE - 200).c_str());
 			status = PDFHummus::eFailure;
 			break;
 		}
@@ -936,6 +951,11 @@ PDFDictionary* PDFParser::ParsePage(unsigned long inPageIndex)
 {
 	if(mPagesCount <= inPageIndex)
 		return NULL;
+
+	if (mPagesObjectIDs[inPageIndex] == 0) {
+		TRACE_LOG1("PDFParser::ParsePage, page marked as null at index %ld", inPageIndex);
+		return NULL;
+	}
 
 	PDFObjectCastPtr<PDFDictionary> pageObject(ParseNewObject(mPagesObjectIDs[inPageIndex]));
 
@@ -1137,7 +1157,7 @@ EStatusCode PDFParser::ParseDirectory(LongFilePositionType inXrefPosition,
 			if(objKeyword->GetValue() != scObj)
 			{
 				TRACE_LOG1("PDFParser::ParseDirectory, failed to read xref object declaration, expected obj keyword found %s",
-					objKeyword->GetValue().c_str());
+					objKeyword->GetValue().substr(0, MAX_TRACE_SIZE - 200).c_str());
 				status = PDFHummus::eFailure;
 				break;
 			}
@@ -1271,7 +1291,7 @@ EStatusCode PDFParser::BuildXrefTableAndTrailerFromXrefStream(long long inXrefSt
 		if(objKeyword->GetValue() != scObj)
 		{
 			TRACE_LOG1("PDFParser::BuildXrefTableAndTrailerFromXrefStream, failed to read xref object declaration, expected obj keyword found %s",
-				objKeyword->GetValue().c_str());
+				objKeyword->GetValue().substr(0, MAX_TRACE_SIZE - 200).c_str());
 			status = PDFHummus::eFailure;
 			break;
 		}
@@ -1372,7 +1392,7 @@ EStatusCode PDFParser::ParseXrefFromXrefStream(XrefEntryInput* inXrefTable,
 		if(objKeyword->GetValue() != scObj)
 		{
 			TRACE_LOG1("PDFParser::ParseXrefFromXrefStream, failed to read xref object declaration, expected obj keyword found %s",
-				objKeyword->GetValue().c_str());
+				objKeyword->GetValue().substr(0, MAX_TRACE_SIZE - 200).c_str());
 			status = PDFHummus::eFailure;
 			break;
 		}
@@ -1938,34 +1958,14 @@ EStatusCodeAndIByteReader PDFParser::CreateFilterForStream(IByteReader* inStream
 					break;
 				}
 				case 10:
-				{
-					result = new InputPredictorPNGNoneStream(result,columnsValue);
-					break;
-				}
 				case 11:
-				{
-					result = new InputPredictorPNGSubStream(result,columnsValue);
-					break;
-				}
 				case 12:
-				{
-
-					result =  new InputPredictorPNGUpStream(result,columnsValue);
-					break;
-				}
 				case 13:
-				{
-
-					result =  new InputPredictorPNGAverageStream(result,columnsValue);
-					break;
-				}
 				case 14:
-				{
-					result =  new InputPredictorPNGPaethStream(result,columnsValue);
-					break;
-				}
 				case 15:
 				{
+					// Gal: optimum can handle all presets, because non-optimum presets still require a function sign flag
+					// at line start...so optimum can handle them.
 					result =  new InputPredictorPNGOptimumStream(result,
 																 colorsValue,
 																 bitsPerComponentValue,
@@ -1996,7 +1996,7 @@ EStatusCodeAndIByteReader PDFParser::CreateFilterForStream(IByteReader* inStream
 			result = mParserExtender->CreateFilterForStream(inStream,inFilterName,inDecodeParams);
 			if(result == inStream)
 			{
-				TRACE_LOG1("PDFParser::CreateFilterForStream, filter is not supported by extender - %s",inFilterName->GetValue().c_str());
+				TRACE_LOG1("PDFParser::CreateFilterForStream, filter is not supported by extender - %s",inFilterName->GetValue().substr(0, MAX_TRACE_SIZE - 200).c_str());
 				status = PDFHummus::eFailure;
 				break;
 			}
@@ -2034,6 +2034,18 @@ PDFObjectParser* PDFParser::StartReadingObjectsFromStream(PDFStreamInput* inStre
 	PDFObjectParser* objectsParser = new PDFObjectParser();
 	InputStreamSkipperStream* source = new InputStreamSkipperStream(readStream);
 	objectsParser->SetReadStream(source,source,true);
+	objectsParser->SetDecryptionHelper(&mDecryptionHelper);
+	objectsParser->SetParserExtender(mParserExtender);
+
+	return objectsParser;
+}
+
+PDFObjectParser* PDFParser::StartReadingObjectsFromStreams(PDFArray* inArrayOfStreams) {
+	IByteReader* readStream = new ArrayOfInputStreamsStream(inArrayOfStreams,this);
+
+	PDFObjectParser* objectsParser = new PDFObjectParser();
+	InputStreamSkipperStream* source = new InputStreamSkipperStream(readStream);
+	objectsParser->SetReadStream(source, source, true);
 	objectsParser->SetDecryptionHelper(&mDecryptionHelper);
 	objectsParser->SetParserExtender(mParserExtender);
 

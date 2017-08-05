@@ -105,7 +105,7 @@ MergeToPDFForm.h
 ModifyingEncryptedFile.h
 ModifyingExistingFileContent.h
 PageModifierTest.h
-PageOrderModification.cpp
+PageOrderModification.h
 OpenTypeTest.h
 OutputFileStreamTest.h
 ParsingFaulty.h
@@ -151,6 +151,8 @@ FlateObjectDecodeTest.cpp
 FlateObjectDecodeTest.h
 ParsingFaulty.cpp
 ParsingFaulty.h
+ParsingBadXref.cpp
+ParsingBadXref.h
 )
 
 source_group("TestingSystem\\Hummus Paths" FILES
